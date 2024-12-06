@@ -1,5 +1,5 @@
 # Service definition:
-- We have two dockers: 
+- We have four dockers: 
 1. An Ubuntu (latest version) one which contains the flags. 
 2. One who has install apache service. 
 The attacker has access to a web page (web_docker) and has to look for information that can help him accessing the other docker.

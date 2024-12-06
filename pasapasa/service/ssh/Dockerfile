@@ -2,7 +2,7 @@ FROM ubuntu:latest
 RUN apt update && apt install -y openssh-server
 
 # Create user
-RUN useradd -m dev1 && echo "dev1:w3ar3h4ck3r2" | chpasswd
+RUN useradd -m shaktale && echo "shaktale:fortrash" | chpasswd
 
 # Configure SSH
 RUN mkdir /var/run/sshd
