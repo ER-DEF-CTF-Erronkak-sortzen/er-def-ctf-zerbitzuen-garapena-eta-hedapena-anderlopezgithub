@@ -6,8 +6,11 @@ import http.client
 import socket
 import paramiko
 import hashlib
+
 PORT_WEB = 80
 PORT_SSH = 8822
+PORT_FTP = 21
+PORT_DB = 3306
 def ssh_connect():
     def decorator(func):
         def wrapper(*args, **kwargs):
@@ -47,23 +50,39 @@ class MyChecker(checkerlib.BaseChecker):
 
     def check_service(self):
         # check if ports are open
-        if not self._check_port_web(self.ip, PORT_WEB) or not self._check_port_ssh(self.ip, PORT_SSH):
+        if not self._check_port_web(self.ip, PORT_WEB):
             return checkerlib.CheckResult.DOWN
-        #else
+        if not self._check_port(self.ip, PORT_SSH):
+            return checkerlib.CheckResult.DOWN
+        if not self._check_port(self.ip, PORT_FTP):
+            return checkerlib.CheckResult.DOWN
+        if not self._check_port(self.ip, PORT_DB):
+            return checkerlib.CheckResult.DOWN
+        
         # check if server is Apache 2.4.50
         if not self._check_apache_version():
             return checkerlib.CheckResult.FAULTY
-        # check if dev1 user exists in pasapasa_ssh docker
-        if not self._check_ssh_user('dev1'):
+        
+        # check if shaktale user exists in pasapasa_ssh docker
+        if not self._check_ssh_user('shaktale'):
             return checkerlib.CheckResult.FAULTY
-        file_path_web = '/usr/local/apache2/htdocs/index.html'
-        # check if index.hmtl from pasapasa_web has been changed by comparing its hash with the hash of the original file
-        if not self._check_web_integrity(file_path_web):
-            return checkerlib.CheckResult.FAULTY            
-        file_path_ssh = '/etc/ssh/sshd_config'
+        
+        files = {'e4212090f6fff4da501a6e5d0fc7c44d': ('pasapasa_web_1','/var/www/html/index.html'), 
+               'a7fe4d50a63d18df541cacb5ae43d0b8': ('pasapasa_web_1','/var/www/html/login.php'),
+               'bf0cf5154762078a36827e9e4b81326e': ('pasapasa_ftp_1','/home/vsftpd/ftpuser/usernames.txt'),
+               '2f51d5e415c8c7eaa8dcb3f995d4eff0': ('pasapasa_ftp_1','/home/vsftpd/ftpuser/passlist.txt'),
+               '6f264d7fac3dec49ed7f5f3bfbbff6b5': ('pasapasa_ssh_1','/etc/ssh/sshd_config')
+               }
+        # check if files has been changed by comparing its hash with the hash of the original file
+        #if not self._check_files_integrity(files):
+        #    return checkerlib.CheckResult.FAULTY 
+        
+        
+        #file_path_ssh = '/etc/ssh/sshd_config'
         # check if /etc/sshd_config from pasapasa_ssh has been changed by comparing its hash with the hash of the original file
-        if not self._check_ssh_integrity(file_path_ssh):
-            return checkerlib.CheckResult.FAULTY            
+        #if not self._check_ssh_integrity(file_path_ssh):
+        #    return checkerlib.CheckResult.FAULTY
+        
         return checkerlib.CheckResult.OK
     
     def check_flag(self, tick):
@@ -88,17 +107,20 @@ class MyChecker(checkerlib.BaseChecker):
         if stderr.channel.recv_exit_status() != 0:
             return False
         return True
-      
+    
     @ssh_connect()
-    def _check_web_integrity(self, path):
+    def _check_files_integrity(self, files):
+        integrity = True
         ssh_session = self.client
-        command = f"docker exec pasapasa_web_1 sh -c 'cat {path}'"
-        stdin, stdout, stderr = ssh_session.exec_command(command)
-        if stderr.channel.recv_exit_status() != 0:
-            return False
-        
-        output = stdout.read().decode().strip()
-        return hashlib.md5(output.encode()).hexdigest() == 'a4ed71eb4f7c89ff868088a62fe33036'
+        for key, data in files.items():
+            command = f"docker exec {data[0]} sh -c 'cat {data[1]}'"
+            stdin, stdout, stderr = ssh_session.exec_command(command)
+            if stderr.channel.recv_exit_status() != 0:
+                return False
+            output = stdout.read().decode().strip()
+            integrity = integrity and hashlib.md5(output.encode()).hexdigest() == key
+
+        return integrity
     
     @ssh_connect()
     def _check_ssh_integrity(self, path):
@@ -110,11 +132,13 @@ class MyChecker(checkerlib.BaseChecker):
         output = stdout.read().decode().strip()
         print (hashlib.md5(output.encode()).hexdigest())
 
-        return hashlib.md5(output.encode()).hexdigest() == '39cff490d2bf197588ad0d0f9f24f906'
+        #return hashlib.md5(output.encode()).hexdigest() == '39cff490d2bf197588ad0d0f9f24f906'
+        return hashlib.md5(output.encode()).hexdigest() == '6f264d7fac3dec49ed7f5f3bfbbff6b5' 
   
     # Private Funcs - Return False if error
     def _add_new_flag(self, ssh_session, flag):
-        # Execute the file creation command in the container
+        ##### SSH CONTAINER ######
+        # Execute the file creation command in the ssh container
         command = f"docker exec pasapasa_ssh_1 sh -c 'echo {flag} >> /tmp/flag.txt'"
         stdin, stdout, stderr = ssh_session.exec_command(command)
 
@@ -122,6 +146,24 @@ class MyChecker(checkerlib.BaseChecker):
         if stderr.channel.recv_exit_status() != 0:
             return False
         
+        ##### FTP CONTAINER ######
+        # Execute the file creation command in the ftp container
+        command = f"docker exec pasapasa_ftp_1 sh -c 'echo {flag} >> /home/vsftpd/ftpuser/flags.txt'"
+        stdin, stdout, stderr = ssh_session.exec_command(command)
+
+        # Check if the command executed successfully
+        if stderr.channel.recv_exit_status() != 0:
+            return False
+        
+        ##### MARIADB CONTAINER #####
+        sql = f"INSERT INTO flags (flag) VALUES ('{flag}');"
+        # Comando para ejecutar el comando SQL dentro del contenedor MariaDB
+        command = f"docker exec pasapasa_mariadb_1 sh -c \"mariadb -uroot -pht3ZklyypNce db -e \\\"{sql}\\\"\""
+        stdin, stdout, stderr = ssh_session.exec_command(command)
+
+        # Check if the command executed successfully
+        if stderr.channel.recv_exit_status() != 0:
+            return False
         # Return the result
         return {'flag': flag}
 
@@ -149,7 +191,7 @@ class MyChecker(checkerlib.BaseChecker):
             if conn:
                 conn.close()
 
-    def _check_port_ssh(self, ip, port):
+    def _check_port(self, ip, port):
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(5)
