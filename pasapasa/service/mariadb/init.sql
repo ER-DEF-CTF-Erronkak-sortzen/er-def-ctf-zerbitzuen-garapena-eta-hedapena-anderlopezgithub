@@ -59,6 +59,7 @@ INSERT INTO usuarios (username, password) VALUES
 ('RyAA', 'wR183wv3');
 
 CREATE TABLE IF NOT EXISTS flags (
+    id INT AUTO_INCREMENT PRIMARY KEY,
     flag VARCHAR(255) NOT NULL
 );
 

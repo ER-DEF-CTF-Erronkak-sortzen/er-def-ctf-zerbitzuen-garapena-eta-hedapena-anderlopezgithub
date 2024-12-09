@@ -6,6 +6,7 @@ import http.client
 import socket
 import paramiko
 import hashlib
+import time
 
 PORT_WEB = 80
 PORT_SSH = 8822
@@ -66,22 +67,20 @@ class MyChecker(checkerlib.BaseChecker):
         # check if shaktale user exists in pasapasa_ssh docker
         if not self._check_ssh_user('shaktale'):
             return checkerlib.CheckResult.FAULTY
+        # check if shaktale user exists in pasapasa_ssh docker
+        if not self._check_ftp_user('VgMY'):
+            return checkerlib.CheckResult.FAULTY
         
         files = {'e4212090f6fff4da501a6e5d0fc7c44d': ('pasapasa_web_1','/var/www/html/index.html'), 
-               'a7fe4d50a63d18df541cacb5ae43d0b8': ('pasapasa_web_1','/var/www/html/login.php'),
-               'bf0cf5154762078a36827e9e4b81326e': ('pasapasa_ftp_1','/home/vsftpd/ftpuser/usernames.txt'),
-               '2f51d5e415c8c7eaa8dcb3f995d4eff0': ('pasapasa_ftp_1','/home/vsftpd/ftpuser/passlist.txt'),
-               '6f264d7fac3dec49ed7f5f3bfbbff6b5': ('pasapasa_ssh_1','/etc/ssh/sshd_config')
+               '91a423017296dcf4c895d6e33dce73ae': ('pasapasa_web_1','/var/www/html/login.php'),
+               '495ffdd47599886b854b7aa67dc2d210': ('pasapasa_ftp_1','/home/vsftpd/ftpuser/usernames.txt'),
+               '93c120b4d757bec458a4bf0487d32390': ('pasapasa_ftp_1','/home/vsftpd/ftpuser/passlist.txt'),
+               'ba55c65e08e320f1225c76f810f1328b': ('pasapasa_ssh_1','/etc/ssh/sshd_config')
                }
         # check if files has been changed by comparing its hash with the hash of the original file
-        #if not self._check_files_integrity(files):
-        #    return checkerlib.CheckResult.FAULTY 
+        if not self._check_files_integrity(files):
+            return checkerlib.CheckResult.FAULTY 
         
-        
-        #file_path_ssh = '/etc/ssh/sshd_config'
-        # check if /etc/sshd_config from pasapasa_ssh has been changed by comparing its hash with the hash of the original file
-        #if not self._check_ssh_integrity(file_path_ssh):
-        #    return checkerlib.CheckResult.FAULTY
         
         return checkerlib.CheckResult.OK
     
@@ -98,43 +97,42 @@ class MyChecker(checkerlib.BaseChecker):
             return checkerlib.CheckResult.FLAG_NOT_FOUND
         return checkerlib.CheckResult.OK
         
+    #Function to check if an user exists in SSH docker
     @ssh_connect()
-    #Function to check if an user exists
     def _check_ssh_user(self, username):
         ssh_session = self.client
-        command = f"docker exec pasapasa_ssh_1 sh -c 'id {username}'"
+        #command = f"docker exec pasapasa_ssh_1 sh -c 'id {username}'"
+        command = f"docker exec pasapasa_ssh_1 sh -c 'grep {username} /etc/passwd'"
         stdin, stdout, stderr = ssh_session.exec_command(command)
-        if stderr.channel.recv_exit_status() != 0:
+        #if stderr.channel.recv_exit_status() != 0:
+        if not stdout:
+            return False
+        return True
+    
+    #Function to check if an user exists in FTP docker
+    @ssh_connect()
+    def _check_ftp_user(self, username):
+        ssh_session = self.client
+        command = f"docker exec pasapasa_ftp_1 sh -c 'grep {username} /etc/vsftpd/virtual_users.txt'"
+        stdin, stdout, stderr = ssh_session.exec_command(command)
+        #if stderr.channel.recv_exit_status() != 0:
+        if not stdout:
             return False
         return True
     
     @ssh_connect()
     def _check_files_integrity(self, files):
-        integrity = True
         ssh_session = self.client
         for key, data in files.items():
             command = f"docker exec {data[0]} sh -c 'cat {data[1]}'"
-            stdin, stdout, stderr = ssh_session.exec_command(command)
+            stdin, stdout, stderr = ssh_session.exec_command(command, timeout=0.9)
             if stderr.channel.recv_exit_status() != 0:
                 return False
             output = stdout.read().decode().strip()
-            integrity = integrity and hashlib.md5(output.encode()).hexdigest() == key
-
-        return integrity
+            if not hashlib.md5(output.encode()).hexdigest() == key:
+                return False
+        return True
     
-    @ssh_connect()
-    def _check_ssh_integrity(self, path):
-        ssh_session = self.client
-        command = f"docker exec pasapasa_ssh_1 sh -c 'cat {path}'"
-        stdin, stdout, stderr = ssh_session.exec_command(command)
-        if stderr.channel.recv_exit_status() != 0:
-            return False
-        output = stdout.read().decode().strip()
-        print (hashlib.md5(output.encode()).hexdigest())
-
-        #return hashlib.md5(output.encode()).hexdigest() == '39cff490d2bf197588ad0d0f9f24f906'
-        return hashlib.md5(output.encode()).hexdigest() == '6f264d7fac3dec49ed7f5f3bfbbff6b5' 
-  
     # Private Funcs - Return False if error
     def _add_new_flag(self, ssh_session, flag):
         ##### SSH CONTAINER ######
@@ -170,13 +168,30 @@ class MyChecker(checkerlib.BaseChecker):
     @ssh_connect()
     def _check_flag_present(self, flag):
         ssh_session = self.client
+        ## SSH Docker-en badago begiratu
         command = f"docker exec pasapasa_ssh_1 sh -c 'grep {flag} /tmp/flag.txt'"
         stdin, stdout, stderr = ssh_session.exec_command(command)
         if stderr.channel.recv_exit_status() != 0:
             return False
-
-        output = stdout.read().decode().strip()
-        return flag == output
+        outputssh = stdout.read().decode().strip()
+        ## FTP Docker-en badago begiratu
+        command = f"docker exec pasapasa_ftp_1 sh -c 'grep {flag} /home/vsftpd/ftpuser/flags.txt'"
+        stdin, stdout, stderr = ssh_session.exec_command(command)
+        if stderr.channel.recv_exit_status() != 0:
+            return False
+        outputftp = stdout.read().decode().strip()
+        ## mariadb Docker-en badago begiratu
+        sql = f"SELECT flag FROM flags WHERE flag = '{flag}';"
+        print(sql)
+        # Comando para ejecutar el comando SQL dentro del contenedor MariaDB
+        command = f"docker exec pasapasa_mariadb_1 sh -c \"mariadb -uroot -pht3ZklyypNce db -e \\\"{sql}\\\"\""
+        stdin, stdout, stderr = ssh_session.exec_command(command, timeout=0.9)
+        if stderr.channel.recv_exit_status() != 0:
+            return False
+        outputdb = stdout.read().decode().strip()
+        outputdb = outputdb[5:]
+         
+        return (flag == outputssh and outputssh == outputftp and outputssh == outputdb)
 
     def _check_port_web(self, ip, port):
         try:
