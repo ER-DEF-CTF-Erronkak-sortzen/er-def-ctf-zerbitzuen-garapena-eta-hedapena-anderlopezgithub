@@ -2,5 +2,9 @@
 
 docker stop pasapasa_ssh_1 
 docker stop pasapasa_web_1
+docker stop pasapasa_mariadb_1
+docker stop pasapasa_ftp_1
 docker rm pasapasa_ssh_1 
 docker rm pasapasa_web_1
+docker rm pasapasa_mariadb_1
+docker rm pasapasa_ftp_1
