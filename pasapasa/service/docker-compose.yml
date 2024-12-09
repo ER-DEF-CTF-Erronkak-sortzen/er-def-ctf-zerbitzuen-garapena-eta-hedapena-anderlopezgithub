@@ -1,27 +1,5 @@
-##ORIGINAL##
-#version: '3'
-#services:
-#    web:
-#        build:
-#            context: ./web
-#            dockerfile: Dockerfile
-#        ports:
-#            - "9797:80"
-#    ssh:
-#        build:
-#            context: ./ssh
-#            dockerfile: Dockerfile
-#        ports:
-#            - "8822:22"
-##FIN ORIGINAL##
 version: '3'
 services:
-#    web:
-#        build:
-#            context: ./web
-#            dockerfile: Dockerfile
-#        ports:
-#            - "80:80"
     ssh:
         build:
             context: ./ssh
@@ -47,8 +25,6 @@ services:
             dockerfile: Dockerfile
         ports:
             - "80:80"
-#        depends_on:
-#            - "mariadb"
     ftp:
         build: 
             context: ./ftp
@@ -56,7 +32,6 @@ services:
         environment:
             - FTP_USER=VgMY
             - FTP_PASS=B5yYTXF3
-#            - FTP_HOME=/var/ftp/ftpuser
         ports:
             - "21:21"
             - "20:20"
