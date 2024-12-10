@@ -1,14 +1,37 @@
 version: '3'
 services:
-    web:
-        build:
-            context: ./web
-            dockerfile: Dockerfile
-        ports:
-            - "9797:80"
     ssh:
         build:
             context: ./ssh
             dockerfile: Dockerfile
         ports:
             - "8822:22"
+    mariadb:
+        build:
+            context: ./mariadb
+            dockerfile: Dockerfile
+        restart: unless-stopped
+        tty: true
+        environment:
+            MYSQL_ROOT_PASSWORD: ht3ZklyypNce
+            MYSQL_DATABASE: db
+            MYSQL_USER: pNce
+            MYSQL_PASSWORD: ht3Zklyy
+        ports:
+            - "3306:3306"
+    web:
+        build:
+            context: ./web
+            dockerfile: Dockerfile
+        ports:
+            - "80:80"
+    ftp:
+        build: 
+            context: ./ftp
+            dockerfile: Dockerfile
+        environment:
+            - FTP_USER=VgMY
+            - FTP_PASS=B5yYTXF3
+        ports:
+            - "21:21"
+            - "20:20"
