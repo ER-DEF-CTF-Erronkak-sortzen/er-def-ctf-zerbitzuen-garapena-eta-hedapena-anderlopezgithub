@@ -37,8 +37,14 @@ ssh docker is configured attending to the following tips:
     - mariadb -upNce -pht3Zklyy db "SELECT flag FROM flags ORDER BY id DESC LIMIT 5;"
     - kopiatu azken 5 flagak.
     - Konektatua 10.0.2.1 makinara ssh bitartez eta bertan /root/xx.flag fitxtegian itsatsi.
-  Defentza
-    - mariadb -upNce -pht3Zklyy db "SET PASSWORD FOR 'pNce'@'%' = PASSWORD('newpass');"
+  Defentza-rako 2 gauza egin daitezke:
+    1. MariaDBko erabiltzaiearen pasahitza aldatu: mariadb -upNce -pht3Zklyy db "SET PASSWORD FOR 'pNce'@'%' = PASSWORD('newpass');"
+    2. db.php fitxategian sql sententziaren exekuzioa preparedStatement batekin egin SQLinjection erasoa ekiditzeko (18. eta 19. lerrotan)
+      $sql = "SELECT * FROM usuarios WHERE username=? AND password=?";
+      $stmt = $mysqli->prepare($sql);
+      $stmt->bind_param($username, $password);
+      $result = $conn->execute($stmt);
+
 
 - Erasotzailea mariadb zerbitzuan usuarios izeneko taula bat ikusiko du baita. Bertan erabiltzaile eta pasahitz batzuk aurkitutko ditu, ftp zerbitzukoak barne.
   Erasoa Team1-en kontra
